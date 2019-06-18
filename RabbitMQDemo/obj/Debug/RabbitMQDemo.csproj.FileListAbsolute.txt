@@ -8,3 +8,6 @@ F:\DoNet\RabbitMQDemo\RabbitMQDemo\bin\Debug\RabbitMQ.Client.xml
 F:\DoNet\RabbitMQDemo\RabbitMQDemo\obj\Debug\RabbitMQDemo.csprojResolveAssemblyReference.cache
 F:\DoNet\RabbitMQDemo\RabbitMQDemo\obj\Debug\RabbitMQDemo.exe
 F:\DoNet\RabbitMQDemo\RabbitMQDemo\obj\Debug\RabbitMQDemo.pdb
+F:\CSharp\RabbitMQServerDemo.Net\RabbitMQServerDemo.Net\RabbitMQDemo\bin\Debug\RabbitMQDemo.exe.config
+F:\CSharp\RabbitMQServerDemo.Net\RabbitMQServerDemo.Net\RabbitMQDemo\obj\Debug\RabbitMQDemo.exe
+F:\CSharp\RabbitMQServerDemo.Net\RabbitMQServerDemo.Net\RabbitMQDemo\obj\Debug\RabbitMQDemo.pdb
