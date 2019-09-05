@@ -18,23 +18,23 @@ namespace MQLogicLayer.RabbitMQLayer
         private EventingBasicConsumer consumer;
         private IBasicProperties properties;
 
-        public string username;
-        public string pwd;
-        public int port;
-        public string host;
-
-        private UTF8Encoding encoding;
+        public string username { get; private set; }
+        public string pwd { get; private set; }
+        public int port { get; private set; }
+        public string host { get; private set; }
+        public bool UseConfirm { get; private set; }
+        public bool AutoAck { get; private set; }
 
         public string Exchange { get; private set; }
 
         public string Queue { get; private set; }
 
-        public string RoutingKey { get; set; }
+        public string RoutingKey { get; private set; }
 
         /// <summary>
         /// 处理从MQ接收到的数据
         /// </summary>
-        public event EventHandler<byte[]> HandleRcvData;
+        public Action<BasicDeliverEventArgs> HandleRcvData;
 
         public string ErrorInfo { get; private set; }
 
@@ -47,9 +47,12 @@ namespace MQLogicLayer.RabbitMQLayer
         /// <param name="pwd"></param>
         /// <param name="exchangeName"></param>
         /// <param name="queueName"></param>
+        /// <param name="routingKey"></param>
+        /// <param name="autoAck">队列自动确认消息</param>
+        /// <param name="useConfirm"></param>
         /// <param name="host"></param>
         /// <param name="port"></param>
-        public RabbitMqUtil(string username, string pwd, string exchangeName, string queueName,string routingKey, string host = "localhost", int port = 5672)
+        public RabbitMqUtil(string username, string pwd, string exchangeName, string queueName, string routingKey, bool autoAck, bool useConfirm, string host = "localhost", int port = 5672)
         {
             this.username = username;
             this.pwd = pwd;
@@ -57,8 +60,9 @@ namespace MQLogicLayer.RabbitMQLayer
             this.port = port;
             this.Exchange = exchangeName;
             this.Queue = queueName;
-            this.encoding = new UTF8Encoding();
             this.RoutingKey = routingKey;
+            this.UseConfirm = useConfirm;
+            AutoAck = autoAck;
             ConnectState = false;
         }
 
@@ -90,9 +94,11 @@ namespace MQLogicLayer.RabbitMQLayer
                         Channel.ExchangeDeclare(Exchange, ExchangeType.Direct, false, true, null);
                         Channel.QueueDeclare(Queue, false, false, true, null);
                         Channel.QueueBind(Queue, Exchange, RoutingKey);
-                        Channel.BasicAck(2, true);
+                        if (UseConfirm) { Channel.ConfirmSelect(); }
+                        this.properties = this.Channel.CreateBasicProperties();
+                        this.properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
                         consumer = new EventingBasicConsumer(Channel);
-                        Channel.BasicConsume(Queue, true, consumer);
+                        Channel.BasicConsume(Queue, AutoAck, consumer);
                         consumer.Received += MqMsgHandler;
                         this.ConnectState = true;
                     }
@@ -140,7 +146,7 @@ namespace MQLogicLayer.RabbitMQLayer
                     {
                         // 设置消息属性
                         Channel.ExchangeDeclare(Exchange, ExchangeType.Direct, true, false, null);
-                        Channel.BasicAck(2, true);
+                        if (UseConfirm) { Channel.ConfirmSelect(); }
                         this.properties = this.Channel.CreateBasicProperties();
                         this.properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
                         this.ConnectState = true;
@@ -190,9 +196,11 @@ namespace MQLogicLayer.RabbitMQLayer
                         // 设置消息属性
                         Channel.QueueDeclare(Queue, false, false, true, null);//
                         Channel.QueueBind(Queue, Exchange, RoutingKey);
-                        Channel.BasicAck(2, true);
+                        if (UseConfirm) { Channel.ConfirmSelect(); }
+                        this.properties = this.Channel.CreateBasicProperties();
+                        this.properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
                         consumer = new EventingBasicConsumer(Channel);
-                        Channel.BasicConsume(Queue, true, consumer);
+                        Channel.BasicConsume(Queue, AutoAck, consumer);
                         consumer.Received += MqMsgHandler;
                         this.ConnectState = true;
                     }
@@ -260,7 +268,13 @@ namespace MQLogicLayer.RabbitMQLayer
             }
         }
 
-        public bool Send(byte[] d)
+        /// <summary>
+        /// 发送
+        /// </summary>
+        /// <param name="d"></param>
+        /// <param name="useConfirmOnce">是否使用事务</param>
+        /// <returns></returns>
+        public bool Send(byte[] d, string routingKey, bool useConfirmOnce)
         {
             bool rs = false;
             if (conn == null)
@@ -269,26 +283,58 @@ namespace MQLogicLayer.RabbitMQLayer
             }
             try
             {
-                this.Channel.BasicPublish(Exchange, RoutingKey, properties, d);
+                if (useConfirmOnce && !UseConfirm) { Channel.TxSelect(); }
+                this.Channel.BasicPublish(Exchange, routingKey, properties, d);
+                if (useConfirmOnce && !UseConfirm) { Channel.TxCommit(); }
                 rs = true;
             }
             catch (Exception exp)
             {
+                if (useConfirmOnce && !UseConfirm) { Channel.TxRollback(); }
                 this.ErrorInfo = exp.Message;
                 Logger.Error(exp.Message);
             }
             return rs;
         }
 
-        public bool Send(uint frameId, byte[] d)
+        /// <summary>
+        /// 发送
+        /// </summary>
+        /// <param name="frameId"></param>
+        /// <param name="d"></param>
+        /// <param name="useConfirmOnce">是否使用事务</param>
+        /// <returns></returns>
+        public bool Send(uint frameId, byte[] d, string routingKey, bool useConfirmOnce)
         {
             byte[] data = DataConvert.HandleData(frameId, d);
-            return this.Send(data);
+            return this.Send(data, routingKey, useConfirmOnce);
+        }
+
+        /// <summary>
+        /// 收到通知已成功接收处理信息
+        /// </summary>
+        /// <param name="delivertTag">交付标志</param>
+        /// <param name="multiple">是否多条消息</param>
+        public void Ack(ulong delivertTag, bool multiple = false)
+        {
+            Channel.BasicAck(delivertTag, multiple);
+        }
+
+        /// <summary>
+        /// 拒绝消息并重新排队
+        /// </summary>
+        /// <param name="delivertTag">交付标志</param>
+        /// <param name="multiple">是否多条消息</param>
+        /// <param name="requeue">是否重新排队</param>
+        public void NAck(ulong delivertTag, bool multiple = false, bool requeue = true)
+        {
+            //Channel.BasicNack(delivertTag, multiple, requeue);
+            Channel.BasicReject(delivertTag, requeue);
         }
 
         private void MqMsgHandler(object obj, BasicDeliverEventArgs e)
         {
-            HandleRcvData?.Invoke(obj, e.Body);
+            HandleRcvData?.Invoke(e);
         }
     }
 }

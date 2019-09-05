@@ -16,8 +16,8 @@ namespace RabbitMQClient
             {
                 HostName = "127.0.0.1",
                 Port = 5672,
-                UserName = "guest",
-                Password = "guest",
+                UserName = "rbuser",
+                Password = "123456",
                 Protocol = Protocols.DefaultProtocol,
                 AutomaticRecoveryEnabled = true, //自动重连
                 RequestedFrameMax = UInt32.MaxValue,
