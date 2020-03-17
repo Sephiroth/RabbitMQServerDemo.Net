@@ -2,9 +2,11 @@
 using MQLogicLayer.Util;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using RabbitMQ.Client.MessagePatterns;
 using System;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 
 namespace MQLogicLayer.RabbitMQLayer
 {
@@ -100,6 +102,18 @@ namespace MQLogicLayer.RabbitMQLayer
                         consumer = new EventingBasicConsumer(Channel);
                         Channel.BasicConsume(Queue, AutoAck, consumer);
                         consumer.Received += MqMsgHandler;
+                        #region Subscription订阅队列
+                        //Thread thread = new Thread(new ThreadStart(() =>
+                        //{
+                        //    Subscription subscription = new Subscription(Channel, Queue);
+                        //    while (true)
+                        //    {
+                        //        bool getRs = subscription.Next(2000, out BasicDeliverEventArgs args);
+                        //        if (!getRs) { continue; }
+                        //        byte[] data = args.Body;
+                        //    }
+                        //}));
+                        #endregion
                         this.ConnectState = true;
                     }
                     else
