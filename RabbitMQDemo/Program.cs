@@ -9,8 +9,9 @@ namespace RabbitMQDemo
     {
         static void Main(string[] args)
         {
-            MQLogicLayer.RabbitMQLayer.RabbitMqUtil mq = new MQLogicLayer.RabbitMQLayer.RabbitMqUtil("rbuser", "123456", "abc", "aaa", "key", true, false, "localhost", 5672);
-            mq.HandleRcvData += (BasicDeliverEventArgs e) =>
+            MQLogicLayer.RabbitMQLayer.RabbitMqUtil mq = new MQLogicLayer.RabbitMQLayer.RabbitMqUtil(
+                "rbuser", "123456", "abc", "aaa", "key", true, "fanout", false,"localhost", 5672);
+            mq.HandleRcvData += (RabbitMQ.Client.Events.BasicDeliverEventArgs e) =>
             {
                 Console.WriteLine(Encoding.UTF8.GetString(e.Body));
             };

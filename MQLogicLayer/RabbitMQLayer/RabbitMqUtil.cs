@@ -12,13 +12,29 @@ namespace MQLogicLayer.RabbitMQLayer
 {
     public class RabbitMqUtil
     {
-        static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        //public static RabbitMqUtil Instance { get; set; }
+        //public static void InstanceInit(string name, string pwd, string exchange, string ip)
+        //{
+        //    if (Instance == null)
+        //    {
+        //        lock (lockObj)
+        //        {
+        //            if (Instance == null)
+        //            {
+        //                Instance = new RabbitMqUtil(name, pwd, exchange, null, null, true, ExchangeType.Fanout, false, ip);
+        //                Instance.InitMqCreateExchange();
+        //            }
+        //        }
+        //    }
+        //}
+        //private static object lockObj = new object();
 
         private ConnectionFactory factory;
         private IConnection conn;
         public IModel Channel;
         private EventingBasicConsumer consumer;
         private IBasicProperties properties;
+        public string exchangeType { get; private set; }
 
         public string username { get; private set; }
         public string pwd { get; private set; }
@@ -54,7 +70,7 @@ namespace MQLogicLayer.RabbitMQLayer
         /// <param name="useConfirm"></param>
         /// <param name="host"></param>
         /// <param name="port"></param>
-        public RabbitMqUtil(string username, string pwd, string exchangeName, string queueName, string routingKey, bool autoAck, bool useConfirm, string host = "localhost", int port = 5672)
+        public RabbitMqUtil(string username, string pwd, string exchangeName, string queueName, string routingKey, bool autoAck, string exchangeType, bool useConfirm, string host = "localhost", int port = 5672)
         {
             this.username = username;
             this.pwd = pwd;
@@ -62,8 +78,9 @@ namespace MQLogicLayer.RabbitMQLayer
             this.port = port;
             this.Exchange = exchangeName;
             this.Queue = queueName;
-            this.RoutingKey = routingKey;
+            this.RoutingKey = routingKey ?? "RoutingKey";
             this.UseConfirm = useConfirm;
+            this.exchangeType = exchangeType;
             AutoAck = autoAck;
             ConnectState = false;
         }
@@ -74,62 +91,43 @@ namespace MQLogicLayer.RabbitMQLayer
         public void InitMqCreateExchangeQueue()
         {
             if (factory != null) { return; }
-            try
+            this.factory = new ConnectionFactory()
             {
-                this.factory = new ConnectionFactory()
+                HostName = host,
+                Port = port,
+                UserName = username,
+                Password = pwd,
+                VirtualHost = "/",
+                Protocol = Protocols.DefaultProtocol,
+                AutomaticRecoveryEnabled = true, //自动重连
+                RequestedFrameMax = UInt32.MaxValue,
+                RequestedHeartbeat = UInt16.MaxValue //心跳超时时间
+            };
+            this.conn = factory.CreateConnection();
+            if (this.conn.IsOpen)
+            {
+                this.Channel = conn.CreateModel();
+                if (Channel.IsOpen)
                 {
-                    HostName = host,
-                    Port = port,
-                    UserName = username,
-                    Password = pwd,
-                    Protocol = Protocols.DefaultProtocol,
-                    AutomaticRecoveryEnabled = true, //自动重连
-                    RequestedFrameMax = UInt32.MaxValue,
-                    RequestedHeartbeat = UInt16.MaxValue //心跳超时时间
-                };
-                this.conn = factory.CreateConnection();
-                if (this.conn.IsOpen)
-                {
-                    this.Channel = conn.CreateModel();
-                    if (Channel.IsOpen)
-                    {
-                        Channel.ExchangeDeclare(Exchange, ExchangeType.Direct, false, true, null);
-                        Channel.QueueDeclare(Queue, false, false, true, null);
-                        Channel.QueueBind(Queue, Exchange, RoutingKey);
-                        if (UseConfirm) { Channel.ConfirmSelect(); }
-                        this.properties = this.Channel.CreateBasicProperties();
-                        this.properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
-                        consumer = new EventingBasicConsumer(Channel);
-                        Channel.BasicConsume(Queue, AutoAck, consumer);
-                        consumer.Received += MqMsgHandler;
-                        #region Subscription订阅队列
-                        //Thread thread = new Thread(new ThreadStart(() =>
-                        //{
-                        //    Subscription subscription = new Subscription(Channel, Queue);
-                        //    while (true)
-                        //    {
-                        //        bool getRs = subscription.Next(2000, out BasicDeliverEventArgs args);
-                        //        if (!getRs) { continue; }
-                        //        byte[] data = args.Body;
-                        //    }
-                        //}));
-                        #endregion
-                        this.ConnectState = true;
-                    }
-                    else
-                    {
-                        this.ErrorInfo = "Channel打开失败";
-                    }
+                    Channel.ExchangeDeclare(Exchange, exchangeType, false, true, null);
+                    Channel.QueueDeclare(Queue, false, false, true, null);
+                    Channel.QueueBind(Queue, Exchange, RoutingKey);
+                    if (UseConfirm) { Channel.ConfirmSelect(); }
+                    this.properties = this.Channel.CreateBasicProperties();
+                    this.properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
+                    consumer = new EventingBasicConsumer(Channel);
+                    Channel.BasicConsume(Queue, AutoAck, consumer);
+                    consumer.Received += MqMsgHandler;
+                    this.ConnectState = true;
                 }
                 else
                 {
-                    this.ErrorInfo = "conn打开失败";
+                    throw new Exception("Channel打开失败");
                 }
             }
-            catch (Exception exp)
+            else
             {
-                this.ErrorInfo = exp.Message;
-                Logger.Error(exp.Message);
+                throw new Exception("conn打开失败");
             }
         }
 
@@ -139,46 +137,40 @@ namespace MQLogicLayer.RabbitMQLayer
         public void InitMqCreateExchange()
         {
             if (factory != null) { return; }
-            try
+
+            this.factory = new ConnectionFactory()
             {
-                this.factory = new ConnectionFactory()
+                HostName = host,
+                Port = port,
+                UserName = username,
+                Password = pwd,
+                VirtualHost = "/",
+                Protocol = Protocols.DefaultProtocol,
+                AutomaticRecoveryEnabled = true, //自动重连
+                RequestedFrameMax = UInt32.MaxValue,
+                RequestedHeartbeat = UInt16.MaxValue //心跳超时时间
+            };
+            this.conn = factory.CreateConnection();
+            if (this.conn.IsOpen)
+            {
+                this.Channel = conn.CreateModel();
+                if (Channel.IsOpen)
                 {
-                    HostName = host,
-                    Port = port,
-                    UserName = username,
-                    Password = pwd,
-                    Protocol = Protocols.DefaultProtocol,
-                    AutomaticRecoveryEnabled = true, //自动重连
-                    RequestedFrameMax = UInt32.MaxValue,
-                    RequestedHeartbeat = UInt16.MaxValue //心跳超时时间
-                };
-                this.conn = factory.CreateConnection();
-                if (this.conn.IsOpen)
-                {
-                    this.Channel = conn.CreateModel();
-                    if (Channel.IsOpen)
-                    {
-                        // 设置消息属性
-                        Channel.ExchangeDeclare(Exchange, ExchangeType.Direct, true, false, null);
-                        if (UseConfirm) { Channel.ConfirmSelect(); }
-                        this.properties = this.Channel.CreateBasicProperties();
-                        this.properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
-                        this.ConnectState = true;
-                    }
-                    else
-                    {
-                        this.ErrorInfo = "Channel打开失败";
-                    }
+                    // 设置消息属性
+                    Channel.ExchangeDeclare(Exchange, exchangeType, true, false, null);
+                    if (UseConfirm) { Channel.ConfirmSelect(); }
+                    this.properties = this.Channel.CreateBasicProperties();
+                    this.properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
+                    this.ConnectState = true;
                 }
                 else
                 {
-                    this.ErrorInfo = "conn打开失败";
+                    throw new Exception("Channel打开失败");
                 }
             }
-            catch (Exception exp)
+            else
             {
-                this.ErrorInfo = exp.Message;
-                Logger.Error(exp.Message);
+                throw new Exception("conn打开失败");
             }
         }
 
@@ -196,6 +188,7 @@ namespace MQLogicLayer.RabbitMQLayer
                     Port = port,
                     UserName = username,
                     Password = pwd,
+                    VirtualHost = "/",
                     Protocol = Protocols.DefaultProtocol,
                     AutomaticRecoveryEnabled = true, //自动重连
                     RequestedFrameMax = UInt32.MaxValue,
@@ -231,7 +224,6 @@ namespace MQLogicLayer.RabbitMQLayer
             catch (Exception exp)
             {
                 this.ErrorInfo = exp.Message;
-                Logger.Error(exp.Message);
             }
         }
 
@@ -241,44 +233,37 @@ namespace MQLogicLayer.RabbitMQLayer
         public void InitMqNoCreate()
         {
             if (factory != null) { return; }
-            try
+            this.factory = new ConnectionFactory()
             {
-                this.factory = new ConnectionFactory()
+                HostName = host,
+                Port = port,
+                UserName = username,
+                Password = pwd,
+                VirtualHost = "/",
+                Protocol = Protocols.DefaultProtocol,
+                AutomaticRecoveryEnabled = true, //自动重连
+                RequestedFrameMax = UInt32.MaxValue,
+                RequestedHeartbeat = UInt16.MaxValue //心跳超时时间
+            };
+            this.conn = factory.CreateConnection();
+            if (this.conn.IsOpen)
+            {
+                this.Channel = conn.CreateModel();
+                if (Channel.IsOpen)
                 {
-                    HostName = host,
-                    Port = port,
-                    UserName = username,
-                    Password = pwd,
-                    Protocol = Protocols.DefaultProtocol,
-                    AutomaticRecoveryEnabled = true, //自动重连
-                    RequestedFrameMax = UInt32.MaxValue,
-                    RequestedHeartbeat = UInt16.MaxValue //心跳超时时间
-                };
-                this.conn = factory.CreateConnection();
-                if (this.conn.IsOpen)
-                {
-                    this.Channel = conn.CreateModel();
-                    if (Channel.IsOpen)
-                    {
-                        // 设置消息属性
-                        this.properties = this.Channel.CreateBasicProperties();
-                        this.properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
-                        this.ConnectState = true;
-                    }
-                    else
-                    {
-                        this.ErrorInfo = "Channel打开失败";
-                    }
+                    // 设置消息属性
+                    this.properties = this.Channel.CreateBasicProperties();
+                    this.properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
+                    this.ConnectState = true;
                 }
                 else
                 {
-                    this.ErrorInfo = "conn打开失败";
+                    throw new Exception("Channel打开失败");
                 }
             }
-            catch (Exception exp)
+            else
             {
-                this.ErrorInfo = exp.Message;
-                Logger.Error(exp.Message);
+                throw new Exception("conn打开失败");
             }
         }
 
@@ -288,9 +273,8 @@ namespace MQLogicLayer.RabbitMQLayer
         /// <param name="d"></param>
         /// <param name="useConfirmOnce">是否使用事务</param>
         /// <returns></returns>
-        public bool Send(byte[] d, string routingKey, bool useConfirmOnce)
+        public bool Send(byte[] d, string routingKey, bool useConfirmOnce = false)
         {
-            bool rs = false;
             if (conn == null)
             {
                 this.InitMqCreateExchange();
@@ -298,30 +282,15 @@ namespace MQLogicLayer.RabbitMQLayer
             try
             {
                 if (useConfirmOnce && !UseConfirm) { Channel.TxSelect(); }
-                this.Channel.BasicPublish(Exchange, routingKey, properties, d);
+                this.Channel.BasicPublish(Exchange, routingKey, false, properties, d);
                 if (useConfirmOnce && !UseConfirm) { Channel.TxCommit(); }
-                rs = true;
             }
             catch (Exception exp)
             {
                 if (useConfirmOnce && !UseConfirm) { Channel.TxRollback(); }
-                this.ErrorInfo = exp.Message;
-                Logger.Error(exp.Message);
+                throw exp;
             }
-            return rs;
-        }
-
-        /// <summary>
-        /// 发送
-        /// </summary>
-        /// <param name="frameId"></param>
-        /// <param name="d"></param>
-        /// <param name="useConfirmOnce">是否使用事务</param>
-        /// <returns></returns>
-        public bool Send(uint frameId, byte[] d, string routingKey, bool useConfirmOnce)
-        {
-            byte[] data = DataConvert.HandleData(frameId, d);
-            return this.Send(data, routingKey, useConfirmOnce);
+            return true;
         }
 
         /// <summary>
@@ -329,10 +298,7 @@ namespace MQLogicLayer.RabbitMQLayer
         /// </summary>
         /// <param name="delivertTag">交付标志</param>
         /// <param name="multiple">是否多条消息</param>
-        public void Ack(ulong delivertTag, bool multiple = false)
-        {
-            Channel.BasicAck(delivertTag, multiple);
-        }
+        public void Ack(ulong delivertTag, bool multiple = false) => Channel.BasicAck(delivertTag, multiple);
 
         /// <summary>
         /// 拒绝消息并重新排队
@@ -340,9 +306,8 @@ namespace MQLogicLayer.RabbitMQLayer
         /// <param name="delivertTag">交付标志</param>
         /// <param name="multiple">是否多条消息</param>
         /// <param name="requeue">是否重新排队</param>
-        public void NAck(ulong delivertTag, bool multiple = false, bool requeue = true)
+        public void NAck(ulong delivertTag, bool requeue = true)
         {
-            //Channel.BasicNack(delivertTag, multiple, requeue);
             Channel.BasicReject(delivertTag, requeue);
         }
 
