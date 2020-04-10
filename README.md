@@ -5,7 +5,7 @@ By C#
 本库基于RabbitMQ.Client nuget包，旨在封装好RabbitMq使得对初次接触mq的人可以简易使用
 
 #### 软件架构
-软件架构说明 .NetFrameWork4.5和.Net Core3.0 两个版本
+软件架构说明 .NetFrameWork4.5和.Net Core3.0(无法添加到.NetFx的解决方案里,请到MQLogicLayer.Core文件夹里单独打开) 两个版本
 
 #### 安装教程
 
