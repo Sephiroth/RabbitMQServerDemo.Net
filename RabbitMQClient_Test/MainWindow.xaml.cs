@@ -1,20 +1,10 @@
 ﻿using MQLogicLayer.RabbitMQLayer;
-using Org.BouncyCastle.Utilities.Encoders;
+using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace RabbitMQClient_Test
 {
@@ -30,48 +20,39 @@ namespace RabbitMQClient_Test
             InitializeComponent();
         }
 
-        private void Init()
+        private void windowsLoaded(object sender, RoutedEventArgs e)
         {
-            mqClient = new RabbitMqUtil("rbuser", "123456", "abc", "aaa", "key", false, false, "localhost", 5672);
-            mqClient.HandleRcvData += (BasicDeliverEventArgs e) =>
-            {
-                string s = Encoding.UTF8.GetString(e.Body);
-                Dispatcher.Invoke(() =>
-                {
-                    tbRcv.Text = string.Format("{0}\r \n{1}", s, tbRcv.Text);//Hex.ToHexString(e.Body)
-                });
-                if (s.EndsWith("0"))
-                {
-                    mqClient.NAck(e.DeliveryTag, false, false);
-                }
-                else
-                {
-                    mqClient.Ack(e.DeliveryTag);
-                }
-            };
-            mqClient.InitMqCreateExchangeQueue();
-            if (mqClient.ConnectState == false)
-            {
-                string s = mqClient.ErrorInfo;
-            }
-        }
-
-        private void getDataBtnClick(object sender, RoutedEventArgs e)
-        {
-            for (int i = 0; i < 10; i++)
-            {
-                mqClient.Send(Encoding.UTF8.GetBytes(DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss")), "key", false);
-            }
+            mqClient = new RabbitMqUtil("guest", "guest", "TestExchange", "TestQueue1", "routingkey1", false, ExchangeType.Topic, false, "192.168.194.128", 5673);
+            mqClient.InitMqCreateExchangeQueue(ReturnHandler, ReceiveHandler, true, false);
         }
 
         private void sendDataBtnClick(object sender, RoutedEventArgs e)
         {
-            mqClient.Send(Encoding.UTF8.GetBytes(DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss")), "key", false);
+            mqClient.SendByConfirm(Encoding.UTF8.GetBytes(DateTime.Now.ToString()), "routingkey1");
         }
 
-        private void windowsLoaded(object sender, RoutedEventArgs e)
+        private void getDataBtnClick(object sender, RoutedEventArgs e)
         {
-            Init();
+
+        }
+
+        public void ReturnHandler(object obj, BasicReturnEventArgs args)
+        {
+            string rs = Encoding.UTF8.GetString(args.Body.ToArray());
+            Dispatcher.Invoke(() =>
+            {
+                tbRcv.Text += $"{rs}发送失败;退货码:{args.ReplyCode};退货说明:{args.ReplyText} \n";
+            });
+        }
+
+        public void ReceiveHandler(object obj, BasicDeliverEventArgs args)
+        {
+            string rs = Encoding.UTF8.GetString(args.Body.ToArray());
+            Dispatcher.Invoke(() =>
+            {
+                tbRcv.Text += $"{rs}\n";
+            });
+            mqClient.Ack(args.DeliveryTag);
         }
     }
 }

@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800" Loaded="windowsLoaded">
     <Grid>
-        <TextBlock x:Name="tbRcv" Width="720" Height="200" VerticalAlignment="Top"/>
+        <TextBlock x:Name="tbRcv" Width="720" Height="200" VerticalAlignment="Top" ScrollViewer.VerticalScrollBarVisibility="Visible"/>
         
         <Button x:Name="getDataBtn" Click="getDataBtnClick" Content="获取报文" VerticalAlignment="Bottom"/>
 
