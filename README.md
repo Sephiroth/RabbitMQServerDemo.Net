@@ -15,25 +15,25 @@ By C#
 RabbitMqUtil mqUtil = new RabbitMqUtil("guest", "guest", "TestExchange", "TestQueue1", "routingkey1", false, ExchangeType.Topic, false, "192.168.1.2", 5672);
 <br>
 <code>
- // 未找到队列而被打回的消息处理
-  public void ReturnHandler(object obj, BasicReturnEventArgs args)
-        {
-            string rs = Encoding.UTF8.GetString(args.Body.ToArray());
-            Dispatcher.Invoke(() =>
-            {
-                tbRcv.Text += $"{rs}发送失败;退货码:{args.ReplyCode};退货说明:{args.ReplyText} \n";
-            });
-        }
-       // 订阅消息处理
-        public void ReceiveHandler(object obj, BasicDeliverEventArgs args)
-        {
-            string rs = Encoding.UTF8.GetString(args.Body.ToArray());
-            Dispatcher.Invoke(() =>
-            {
-                tbRcv.Text += $"{rs}\n";
-            });
-            mqClient.Ack(args.DeliveryTag);
-        }
+ // 未找到队列而被打回的消息处理 <br>
+  public void ReturnHandler(object obj, BasicReturnEventArgs args)<br>
+        {<br>
+            string rs = Encoding.UTF8.GetString(args.Body.ToArray());<br>
+            Dispatcher.Invoke(() =><br>
+            {<br>
+                tbRcv.Text += $"{rs}发送失败;退货码:{args.ReplyCode};退货说明:{args.ReplyText} \n";<br>
+            });<br>
+        }<br>
+       // 订阅消息处理 <br>
+        public void ReceiveHandler(object obj, BasicDeliverEventArgs args)<br>
+        {<br>
+            string rs = Encoding.UTF8.GetString(args.Body.ToArray());<br>
+            Dispatcher.Invoke(() => <br>
+            { <br>
+                tbRcv.Text += $"{rs}\n"; <br>
+            }); <br>
+            mqClient.Ack(args.DeliveryTag); <br>
+        } <br>
 </code>
 
 
