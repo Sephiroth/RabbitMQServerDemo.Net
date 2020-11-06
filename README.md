@@ -12,31 +12,35 @@ By C#
 #### 使用说明
 
 1.  创建对象 <br>
-RabbitMqUtil mqUtil = new RabbitMqUtil("guest", "guest", "TestExchange", "TestQueue1", "routingkey1", false, ExchangeType.Topic, false, "192.168.1.2", 5672);
-<br>
+
 <code>
- // 未找到队列而被打回的消息处理 <br>
-  public void ReturnHandler(object obj, BasicReturnEventArgs args)<br>
-        {<br>
-            string rs = Encoding.UTF8.GetString(args.Body.ToArray());<br>
-            Dispatcher.Invoke(() =><br>
-            {<br>
-                tbRcv.Text += $"{rs}发送失败;退货码:{args.ReplyCode};退货说明:{args.ReplyText} \n";<br>
-            });<br>
-        }<br>
-       // 订阅消息处理 <br>
-        public void ReceiveHandler(object obj, BasicDeliverEventArgs args)<br>
-        {<br>
-            string rs = Encoding.UTF8.GetString(args.Body.ToArray());<br>
-            Dispatcher.Invoke(() => <br>
-            { <br>
-                tbRcv.Text += $"{rs}\n"; <br>
-            }); <br>
-            mqClient.Ack(args.DeliveryTag); <br>
-        } <br>
+RabbitMqUtil mqUtil = new RabbitMqUtil("guest", "guest", "TestExchange", "TestQueue1", "routingkey1", false, ExchangeType.Topic, false, "192.168.1.2", 5672);
 </code>
-
-
+<br><br>
+<code>
+ // 未找到队列而被打回的消息处理<br>
+public void ReturnHandler(object obj, BasicReturnEventArgs args)
+{
+    string rs = Encoding.UTF8.GetString(args.Body.ToArray());
+    Dispatcher.Invoke(() =>
+    {
+        tbRcv.Text += $"{rs}发送失败;退货码:{args.ReplyCode};退货说明:{args.ReplyText} \n";
+    });
+}
+ <br><br>
+// 订阅消息处理 <br>
+public void ReceiveHandler(object obj, BasicDeliverEventArgs args)
+        {
+            string rs = Encoding.UTF8.GetString(args.Body.ToArray());
+            Dispatcher.Invoke(() =>
+            {
+                tbRcv.Text += $"{rs}\n";
+            });
+            mqClient.Ack(args.DeliveryTag);
+        }
+</code>
+<br><br>
+<code>
 // 创建Exchange和Queue并绑定 <br>
 mqUtil.InitMqCreateExchangeQueue(ReturnHandler, ReceiveHandler, true, false);<br>
 
@@ -46,15 +50,15 @@ InitMqCreateExchange(ReturnHandler,false); <br>
 // 只创建queue并绑定Exchange，用于客户端订阅消息 <br>
 InitMqCreateQueue(ReturnHandler, ReceiveHandler,false,false); <br>
 
-
-2.  发送消息 <br> 
+<br><br>
+1.  发送消息 <br> 
 // 事务发送
 SendByTransaction(byte[] data, string routingKey) <br>
 // confirm模式发送
 SendByConfirm(byte[] data, string routingKey) <br>
 // 普通发送
 Send(byte[] data, string routingKey)<br>
-
+</code>
 
 #### 参与贡献<br>
 
