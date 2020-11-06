@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MQLogicLayer", "MQLogicLaye
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RabbitMQClient_Test", "RabbitMQClient_Test\RabbitMQClient_Test.csproj", "{03AC3B1E-7CFA-480F-ACE8-FFFE20E013CC}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MQLogicLayer.Core", "MQLogicLayer.Core\MQLogicLayer.Core.csproj", "{AE0E525E-23F3-45D7-A8FC-FD6FDECD1A34}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{03AC3B1E-7CFA-480F-ACE8-FFFE20E013CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{03AC3B1E-7CFA-480F-ACE8-FFFE20E013CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{03AC3B1E-7CFA-480F-ACE8-FFFE20E013CC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AE0E525E-23F3-45D7-A8FC-FD6FDECD1A34}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE0E525E-23F3-45D7-A8FC-FD6FDECD1A34}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AE0E525E-23F3-45D7-A8FC-FD6FDECD1A34}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AE0E525E-23F3-45D7-A8FC-FD6FDECD1A34}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
