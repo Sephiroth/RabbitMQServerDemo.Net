@@ -1,30 +1,37 @@
-﻿using RabbitMQ.Client;
+﻿using Newtonsoft.Json;
+using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Authentication;
+using System.Text;
 
 namespace MQLogicLayer.RabbitMQLayer
 {
     public class RabbitMqUtil : IDisposable
     {
+        public static readonly string DEAD_LETTER_EXCHANGE = "x-dead-letter-exchange";
+        public static readonly string MESSAGE_TTL = "x-message-ttl";
+        public static readonly string DEAD_LETTER_KEY = "x-dead-letter-routing-key";
+
         /// <summary>
         /// 是否完成销毁
         /// </summary>
         private bool _disposed;
+        private bool UseInit;
         private List<EventingBasicConsumer> consumerList;
 
-        private ConnectionFactory factory;
-        private IConnection conn;
+        private ConnectionFactory Factory;
+        private IConnection Connect;
         public IModel Channel { get; private set; }
-        private IBasicProperties properties;
+        private IBasicProperties Properties;
 
         #region RabbitMQ基本配置信息
-        public string username { get; private set; }
-        public string pwd { get; private set; }
-        public string host { get; private set; }
-        public int port { get; private set; }
+        public string UserName { get; private set; }
+        public string Pwd { get; private set; }
+        public string Host { get; private set; }
+        public int Port { get; private set; }
         public bool OpenConfirm { get; private set; }
         public bool AutoAck { get; private set; }
         /// <summary>
@@ -33,7 +40,10 @@ namespace MQLogicLayer.RabbitMQLayer
         public bool QueueExclusive { get; set; } = false;
 
         public string Exchange { get; private set; }
-        public string exchangeType { get; private set; }
+        /// <summary>
+        /// 交换器类型
+        /// </summary>
+        public string ExchType { get; private set; }
         public string Queue { get; private set; }
         public string RoutingKey { get; private set; }
         #endregion
@@ -42,6 +52,11 @@ namespace MQLogicLayer.RabbitMQLayer
         public bool ConnectState { get; private set; }
 
         #region 初始化方法
+        public RabbitMqUtil()
+        {
+            consumerList = new List<EventingBasicConsumer>(4);
+        }
+
         /// <summary>
         /// 1.构造器初始化参数
         /// </summary>
@@ -63,34 +78,35 @@ namespace MQLogicLayer.RabbitMQLayer
             string exchangeType,
             bool openConfirm,
             string host = "localhost",
-            int port = 5672)
+            int port = 5672) : this()
         {
-            this.username = username;
-            this.pwd = pwd;
-            this.host = host;
-            this.port = port;
+            this.UserName = username;
+            this.Pwd = pwd;
+            this.Host = host;
+            this.Port = port;
             this.Exchange = exchangeName;
             this.Queue = queueName;
             this.RoutingKey = routingKey ?? "RoutingKey";
             this.OpenConfirm = openConfirm;
-            this.exchangeType = exchangeType;
+            this.ExchType = exchangeType;
             AutoAck = autoAck;
             ConnectState = false;
-            consumerList = new List<EventingBasicConsumer>(4);
         }
 
         /// <summary>
         /// 2.连接到服务器
         /// </summary>
-        public void ConnectServer()
+        /// <param name="factory">如果为空，则使用默认配置</param>
+        /// <returns></returns>
+        public IConnection CreateConnection(ConnectionFactory factory = null)
         {
-            if (factory != null) { throw new Exception("factory对象已被初始化,不能重复初始化"); }
-            factory = new ConnectionFactory
+            ConnectionFactory currentFactory = factory ?? Factory;
+            currentFactory = currentFactory ?? new ConnectionFactory
             {
-                HostName = host,
-                Port = port,
-                UserName = username,
-                Password = pwd,
+                HostName = Host,
+                Port = Port,
+                UserName = UserName,
+                Password = Pwd,
                 VirtualHost = "/",
                 //Protocol = Protocols.DefaultProtocol,
                 AmqpUriSslProtocols = SslProtocols.Tls,
@@ -98,10 +114,18 @@ namespace MQLogicLayer.RabbitMQLayer
                 RequestedFrameMax = UInt32.MaxValue,
                 RequestedHeartbeat = TimeSpan.FromSeconds(UInt16.MaxValue) //心跳超时时间
             };
-            conn = factory.CreateConnection();
-            if (conn.IsOpen == false) { throw new Exception("conn打开失败"); }
-            Channel = conn.CreateModel();
-            if (Channel.IsOpen == false) { ErrorInfo = "Channel打开失败"; }
+            IConnection connection = currentFactory.CreateConnection();
+            if (connection.IsOpen == false) { throw new Exception("conn打开失败"); }
+            Factory = currentFactory;
+            return connection;
+        }
+
+        public IModel CreateModel(IConnection connection)
+        {
+            if (connection.IsOpen == false) { throw new Exception("connection未连接到服务器"); }
+            IModel channel = connection.CreateModel();
+            if (channel.IsOpen == false) { throw new Exception("Channel打开失败"); }
+            return channel;
         }
 
         /// <summary>
@@ -178,6 +202,18 @@ namespace MQLogicLayer.RabbitMQLayer
             Channel.BasicReturn -= eventHandler;
         }
 
+        public void AddDeadLetterQueue(string deadExchangeName = "deadExchange", string deadQueueName = "deadQueue", string routingKey = "routingKey", uint queueRetry = 0, IModel model = null)
+        {
+            Dictionary<string, object> args = new Dictionary<string, object>();
+            //args.TryAdd(DEAD_LETTER_EXCHANGE, deadExchangeName);
+            //if (queueRetry > 0) { args.TryAdd(DEAD_LETTER_EXCHANGE, deadExchangeName); }
+            //args.Add(DEAD_LETTER_KEY, "routingkey");
+            IModel currentChannel = model ?? Channel;
+            currentChannel.ExchangeDeclare(deadExchangeName, ExchangeType.Topic, true, false, args);
+            currentChannel.QueueDeclare(deadQueueName, true, false, false, args);
+            currentChannel.QueueBind(deadQueueName, deadExchangeName, routingKey);
+        }
+
         /// <summary>
         /// 创建Exchange和Queue并绑定
         /// </summary>
@@ -194,13 +230,17 @@ namespace MQLogicLayer.RabbitMQLayer
             bool queueAutoDelete = false,
             IDictionary<string, object> queueArguments = null)
         {
-            ConnectServer();
-            DeclareExchange(Exchange, exchangeType, exchangeDurable, exchangeAutoDelete, null);
+            if (UseInit) { throw new Exception("Connect和Channel已被初始化"); }
+            Connect = Connect ?? CreateConnection();
+            Channel = Channel ?? CreateModel(Connect);
+            DeclareExchange(Exchange, ExchType, exchangeDurable, exchangeAutoDelete, null);
             DeclareQueue(Queue, Exchange, RoutingKey, queueDurable, QueueExclusive, queueAutoDelete, queueArguments);
-            properties = Channel.CreateBasicProperties();
-            properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
+            Properties = Channel.CreateBasicProperties();
+            Properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
             AddReturnHandler(returnHandler);
             AddConsumer(receiveHandler);
+            AddDeadLetterQueue();
+            UseInit = true;
         }
 
         /// <summary>
@@ -209,12 +249,15 @@ namespace MQLogicLayer.RabbitMQLayer
         /// <param name="exchangeDurable">交换区是否持久化</param>
         public void InitMqCreateExchange(EventHandler<BasicReturnEventArgs> returnHandler, bool exchangeDurable = false)
         {
-            ConnectServer();
+            if (UseInit) { throw new Exception("Connect和Channel已被初始化"); }
+            Connect = Connect ?? CreateConnection();
+            Channel = Channel ?? CreateModel(Connect);
             // 设置消息属性
-            Channel.ExchangeDeclare(Exchange, exchangeType, exchangeDurable, true, null);
-            properties = Channel.CreateBasicProperties();
-            properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
+            DeclareExchange(Exchange, ExchType, exchangeDurable, true, null);
+            Properties = Channel.CreateBasicProperties();
+            Properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
             AddReturnHandler(returnHandler);
+            UseInit = true;
         }
 
         /// <summary>
@@ -229,13 +272,16 @@ namespace MQLogicLayer.RabbitMQLayer
             bool queueAutoDelete = true,
             IDictionary<string, object> queueArguments = null)
         {
-            ConnectServer();
+            if (UseInit) { throw new Exception("Connect和Channel已被初始化"); }
+            Connect = Connect ?? CreateConnection();
+            Channel = Channel ?? CreateModel(Connect);
             DeclareQueue(Queue, Exchange, RoutingKey, queueDurable, QueueExclusive, queueAutoDelete, queueArguments);
             // 设置消息属性
-            properties = Channel.CreateBasicProperties();
-            properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
+            Properties = Channel.CreateBasicProperties();
+            Properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
             AddReturnHandler(returnHandler);
             AddConsumer(receiveHandler);
+            UseInit = true;
         }
 
         /// <summary>
@@ -243,11 +289,14 @@ namespace MQLogicLayer.RabbitMQLayer
         /// </summary>
         public void InitMqNoCreate(EventHandler<BasicReturnEventArgs> returnHandler)
         {
-            ConnectServer();
+            if (UseInit) { throw new Exception("Connect和Channel已被初始化"); }
+            Connect = Connect ?? CreateConnection();
+            Channel = Channel ?? CreateModel(Connect);
             // 设置消息属性
-            properties = Channel.CreateBasicProperties();
-            properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
+            Properties = Channel.CreateBasicProperties();
+            Properties.DeliveryMode = 2; //消息是持久的，存在并不会受服务器重启影响 
             AddReturnHandler(returnHandler);
+            UseInit = true;
         }
 
         #endregion
@@ -277,7 +326,7 @@ namespace MQLogicLayer.RabbitMQLayer
                 if (useTransaction) { Channel.TxSelect(); }
                 if (useConfirm) { Channel.ConfirmSelect(); }
 
-                Channel.BasicPublish(Exchange, routingKey, false, properties, data);
+                Channel.BasicPublish(Exchange, routingKey, false, Properties, data);
 
                 if (useTransaction)
                 {
@@ -362,10 +411,134 @@ namespace MQLogicLayer.RabbitMQLayer
                 Channel?.Dispose();
             }
             Channel = null;
-            factory = null;
+            Factory = null;
             _disposed = true;
         }
         #endregion
 
+    }
+
+    public static class RabbitMqExtension
+    {
+        public static readonly string DEAD_LETTER_EXCHANGE = "x-dead-letter-exchange";
+        public static readonly string MESSAGE_TTL = "x-message-ttl";
+        public static readonly string DEAD_LETTER_KEY = "x-dead-letter-routing-key";
+
+        public static IModel CreateChannel(this IConnection connection)
+        {
+            if (connection.IsOpen == false) { throw new Exception("connection未连接到服务器"); }
+            IModel channel = connection.CreateModel();
+            if (channel.IsOpen == false) { throw new Exception("Channel打开失败"); }
+            return channel;
+        }
+
+        /// <summary>
+        /// 声明交换区
+        /// </summary>
+        /// <param name="channel"></param>
+        /// <param name="exchangeName"></param>
+        /// <param name="type"></param>
+        /// <param name="durable"></param>
+        /// <param name="autoDelete"></param>
+        /// <param name="arguments"></param>
+        public static void DeclareExchange(this IModel channel, string exchangeName, string type, bool durable, bool autoDelete, IDictionary<string, object> arguments = null)
+        {
+            channel.ExchangeDeclare(exchangeName, type, durable, autoDelete, arguments);
+        }
+
+        /// <summary>
+        /// 声明队列并绑定到交换区
+        /// </summary>
+        /// <param name="channel"></param>
+        /// <param name="queueName"></param>
+        /// <param name="exchangeName">如果为空，则绑定到默认交换器</param>
+        /// <param name="routingKey"></param>
+        /// <param name="durable"></param>
+        /// <param name="exclusive">=true时队列独占，不论是否设置持久化，断开连接时自动删除</param>
+        /// <param name="autoDelete"></param>
+        /// <param name="arguments"></param>
+        public static void DeclareQueue(this IModel channel, string queueName, string exchangeName, string routingKey, bool durable, bool exclusive, bool autoDelete, IDictionary<string, object> arguments = null)
+        {
+            channel.QueueDeclare(queueName, durable, exclusive, autoDelete, arguments);
+            channel.QueueBind(queueName, exchangeName, routingKey);
+        }
+
+        /// <summary>
+        /// 添加消费者
+        /// </summary>
+        /// <param name="channel"></param>
+        /// <param name="queue"></param>
+        /// <param name="eventHandler"></param>
+        /// <param name="autoAck"></param>
+        /// <returns></returns>
+        public static EventingBasicConsumer AddConsumer(this IModel channel, string queue, EventHandler<BasicDeliverEventArgs> eventHandler, bool autoAck = true)
+        {
+            EventingBasicConsumer consumer = new EventingBasicConsumer(channel);
+            consumer.Received += eventHandler;
+            string consumerStr = channel.BasicConsume(queue, autoAck, consumer);
+            return consumer;
+        }
+
+        /// <summary>
+        /// 删除消费者
+        /// </summary>
+        /// <param name="channel"></param>
+        /// <param name="consumer"></param>
+        /// <param name="eventHandler"></param>
+        /// <returns></returns>
+        public static bool RemoveConsumer(this IModel channel, EventingBasicConsumer consumer, EventHandler<BasicDeliverEventArgs> eventHandler)
+        {
+            string consumerTag = consumer.ConsumerTags.First();
+            channel.BasicCancel(consumerTag);
+            consumer.Received -= eventHandler;
+            return true;
+        }
+
+        /// <summary>
+        /// 处理因找不到队列而被遣回的消息
+        /// </summary>
+        /// <param name="channel"></param>
+        /// <param name="eventHandler"></param>
+        public static void AddReturnHandler(this IModel channel, EventHandler<BasicReturnEventArgs> eventHandler)
+        {
+            channel.BasicReturn += eventHandler;
+        }
+
+        /// <summary>
+        /// 移除方法（处理因找不到队列而被遣回的消息）
+        /// </summary>
+        /// <param name="channel"></param>
+        /// <param name="eventHandler"></param>
+        public static void RemoveReturnHandle(this IModel channel, EventHandler<BasicReturnEventArgs> eventHandler)
+        {
+            channel.BasicReturn -= eventHandler;
+        }
+
+        public static void AddDeadLetterQueue(this IModel channel, string deadExchangeName = "deadExchange", string deadQueueName = "deadQueue", string routingKey = "routingKey", uint queueRetry = 0)
+        {
+            Dictionary<string, object> args = new Dictionary<string, object>();
+            args.Add(DEAD_LETTER_EXCHANGE, deadExchangeName);
+            if (queueRetry > 0) { args.Add(DEAD_LETTER_EXCHANGE, deadExchangeName); }
+            //args.Add(DEAD_LETTER_KEY, "routingkey");
+            channel.ExchangeDeclare(deadExchangeName, ExchangeType.Topic, true, false, args);
+            channel.QueueDeclare(deadQueueName, true, false, false, args);
+            channel.QueueBind(deadQueueName, deadExchangeName, routingKey);
+        }
+
+        public static bool PublishByConfirm(this IModel channel, object body, string exchange, string routingKey)
+        {
+            try
+            {
+                string json = JsonConvert.SerializeObject(body);
+                byte[] bytes = Encoding.UTF8.GetBytes(json);
+                channel.ConfirmSelect();
+                channel.BasicPublish(exchange, routingKey, true, null, bytes);
+                return channel.WaitForConfirms();
+            }
+            catch
+            {
+            }
+            return false;
+        }
     }
 }

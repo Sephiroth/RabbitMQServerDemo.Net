@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EasyNetQ" Version="6.2.0" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="7.0.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MQLogicLayer.Core\MQLogicLayer.Core.csproj" />
+  </ItemGroup>
+
+
+</Project>
