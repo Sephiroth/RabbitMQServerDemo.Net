@@ -524,11 +524,77 @@ namespace MQLogicLayer.Core.RabbitMQLayer
             channel.QueueBind(deadQueueName, deadExchangeName, routingKey);
         }
 
+        /// <summary>
+        /// 收到通知已成功接收处理信息
+        /// </summary>
+        /// <param name="delivertTag">交付标志</param>
+        /// <param name="multiple">是否多条消息</param>
+        public static void Ack(this IModel channel, ulong delivertTag, bool multiple = false) => channel.BasicAck(delivertTag, multiple);
+
+        /// <summary>
+        /// 拒绝消息并重新排队
+        /// </summary>
+        /// <param name="delivertTag">交付标志</param>
+        /// <param name="multiple">是否多条消息</param>
+        /// <param name="requeue">是否重新排队</param>
+        public static void NAck(this IModel channel, ulong delivertTag, bool requeue = true)//bool multiple = false,
+        {
+            //Channel.BasicNack(delivertTag, multiple, requeue);
+            channel.BasicReject(delivertTag, requeue);
+        }
+
+        /// <summary>
+        /// 发送
+        /// </summary>
+        /// <param name="d"></param>
+        /// <param name="useTransaction">是否使用事务</param>
+        /// <returns></returns>
+        private static bool SendData(this IModel channel, byte[] data, string routingKey, string exchange, bool useConfirm = false, bool useTransaction = false)
+        {
+            if (useConfirm && useTransaction) { throw new Exception("不能同时开启Transaction模式和Confirm"); }
+            bool rs = false;
+            if (useTransaction) { channel.TxSelect(); }
+            if (useConfirm) { channel.ConfirmSelect(); }
+
+            channel.BasicPublish(exchange, routingKey, true, null, data);
+
+            if (useTransaction)
+            {
+                channel.TxCommit();
+                rs = true;
+            }
+            if (useConfirm) { rs = channel.WaitForConfirms(); }
+            else { rs = true; }
+            return rs;
+        }
+
+        /// <summary>
+        /// 事务发送
+        /// </summary>
+        /// <param name="data"></param>
+        /// <param name="routingKey"></param>
+        /// <returns></returns>
+        public static bool SendByTransaction(this IModel channel, byte[] data, string routingKey, string exchange)
+        {
+            return channel.SendData(data, routingKey, exchange, false, true);
+        }
+
+        /// <summary>
+        /// confirm模式发送
+        /// </summary>
+        /// <param name="data"></param>
+        /// <param name="routingKey"></param>
+        /// <returns></returns>
+        public static bool SendByConfirm(this IModel channel, byte[] data, string routingKey, string exchange)
+        {
+            return channel.SendData(data, routingKey, exchange, true);
+        }
+
         public static bool PublishByConfirm(this IModel channel, object body, string exchange, string routingKey)
         {
             try
             {
-                byte[] bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(body);
+                byte[] bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(body);// .SerializeObject(body);
                 channel.ConfirmSelect();
                 channel.BasicPublish(exchange, routingKey, true, null, bytes);
                 return channel.WaitForConfirms();
